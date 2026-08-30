@@ -13,8 +13,20 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
+  metadataBase: new URL("https://yin-yang-ping-pong.liuyao401844.chatgpt.site"),
   title: "Yin · Yang Ping Pong",
   description: "A two-player, two-ball game of balance for touchscreens and mouse.",
+  openGraph: {
+    title: "Yin · Yang Ping Pong",
+    description: "Two players. Two balls. One balance.",
+    images: [{ url: "/og.png", width: 1731, height: 909, alt: "Yin and Yang balls launching toward one another" }],
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "Yin · Yang Ping Pong",
+    description: "Two players. Two balls. One balance.",
+    images: ["/og.png"],
+  },
   icons: {
     icon: "/favicon.svg",
     shortcut: "/favicon.svg",
