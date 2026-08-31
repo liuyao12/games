@@ -1,0 +1,100 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#f2eee5" />
+    <meta name="description" content="A simple L-triomino tiling puzzle." />
+    <meta property="og:title" content="One Short — A Tiling Puzzle" />
+    <meta property="og:description" content="Fit L-triominoes around today’s date, with no hints." />
+    <meta property="og:url" content="https://liuyao12.github.io/games/tiling-puzzle/" />
+    <title>One Short — A Tiling Puzzle</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <main class="shell">
+      <header class="masthead">
+        <a class="mark" href="../" aria-label="Back to all games">
+          <span class="mark-shape" aria-hidden="true"><i></i><i></i><i></i></span>
+          <span>ONE SHORT</span>
+        </a>
+        <a class="all-games" href="../">All games ↗</a>
+      </header>
+      <nav class="mode-switch" aria-label="Choose puzzle">
+        <button type="button" data-mode="calendar" class="active">Today’s calendar</button>
+        <button type="button" data-mode="free">Free board</button>
+      </nav>
+      <section class="intro" aria-labelledby="title">
+        <p id="puzzle-kicker" class="eyebrow">TODAY’S CALENDAR</p>
+        <h1 id="title">Make every piece<br /><em>fit.</em></h1>
+      </section>
+      <section class="game" aria-label="Tiling puzzle">
+        <div class="board-wrap">
+          <h2 id="month-name" class="calendar-month">August 2026</h2>
+          <div id="calendar-weekdays" class="calendar-weekdays" aria-hidden="true">
+            <span>Sun</span><span>Mon</span><span>Tue</span><span>Wed</span><span>Thu</span><span>Fri</span><span>Sat</span>
+          </div>
+          <div id="board-control-shell" class="board-control-shell">
+            <button class="board-edge-control edge-top" type="button" data-dimension="height" data-step="1" aria-label="Increase board height" hidden>+</button>
+            <button class="board-edge-control edge-left" type="button" data-dimension="width" data-step="-1" aria-label="Decrease board width" hidden>−</button>
+            <div class="board-stage">
+              <div id="board" class="board" role="grid" aria-label="Puzzle board"></div>
+              <div id="tile-layer" class="tile-layer" aria-label="Placed tiles"></div>
+              <output id="dimension-output" class="board-dimension" hidden>8 × 8</output>
+              <div id="win" class="win" hidden>
+                <div class="win-mark" aria-hidden="true">✓</div>
+                <strong>Perfect fit.</strong>
+                <button id="play-again" type="button">Play again</button>
+              </div>
+            </div>
+            <button class="board-edge-control edge-right" type="button" data-dimension="width" data-step="1" aria-label="Increase board width" hidden>+</button>
+            <button class="board-edge-control edge-bottom" type="button" data-dimension="height" data-step="-1" aria-label="Decrease board height" hidden>−</button>
+          </div>
+        </div>
+        <aside class="controls" aria-label="Puzzle controls">
+          <div class="control-section">
+            <span class="label">Board</span>
+            <div id="calendar-info" class="calendar-info">
+              <span id="calendar-size">7 columns · 6 weeks</span>
+            </div>
+            <p id="missing-count" class="missing-count">Today stays visible</p>
+          </div>
+          <div class="control-section piece-section">
+            <span class="label">Pieces</span>
+            <div class="piece-controls" aria-label="Drag a piece to the board">
+              <button class="piece-tray" type="button" data-piece-kind="tri" data-piece-rotation="0" aria-label="Drag L-triomino, orientation 1">
+                <span class="piece-preview tile-shape" data-rotation="0" aria-hidden="true"></span>
+              </button>
+              <button class="piece-tray" type="button" data-piece-kind="tri" data-piece-rotation="1" aria-label="Drag L-triomino, orientation 2">
+                <span class="piece-preview tile-shape" data-rotation="1" aria-hidden="true"></span>
+              </button>
+              <button class="piece-tray" type="button" data-piece-kind="tri" data-piece-rotation="2" aria-label="Drag L-triomino, orientation 3">
+                <span class="piece-preview tile-shape" data-rotation="2" aria-hidden="true"></span>
+              </button>
+              <button class="piece-tray" type="button" data-piece-kind="tri" data-piece-rotation="3" aria-label="Drag L-triomino, orientation 4">
+                <span class="piece-preview tile-shape" data-rotation="3" aria-hidden="true"></span>
+              </button>
+            </div>
+            <div id="special-piece" class="special-piece">
+              <span>Use once</span>
+              <button id="special-piece-tray" class="piece-tray special-tray" type="button" data-piece-kind="domino" aria-label="Drag the one-use domino">
+                <span id="special-preview" class="piece-preview domino-shape" aria-hidden="true"></span>
+              </button>
+            </div>
+          </div>
+          <div class="control-section progress-section">
+            <span class="label">Placed</span>
+            <div class="counter"><strong id="placed-count">0</strong><span> / </span><span id="total-count">21</span></div>
+          </div>
+          <div class="actions">
+            <button id="undo" type="button" disabled>Undo</button>
+            <button id="reset" type="button">Reset</button>
+            <button id="new-puzzle" type="button">New puzzle</button>
+          </div>
+        </aside>
+      </section>
+    </main>
+    <div id="drag-piece" class="drag-piece tile-shape" aria-hidden="true"></div>
+    <script src="app.js"></script>
+  </body>
+</html>

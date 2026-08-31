@@ -10,5 +10,11 @@ export default defineConfig({
   build: {
     outDir: path.resolve(__dirname, "dist-pages"),
     emptyOutDir: true,
+    rollupOptions: {
+      input: {
+        home: path.resolve(__dirname, "pages/index.html"),
+        yinYang: path.resolve(__dirname, "pages/yin-yang/index.html"),
+      },
+    },
   },
 });
