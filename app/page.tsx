@@ -425,13 +425,6 @@ export default function Home() {
         <div className="brand"><span className="brand-mark">☯</span><span>Yin · Yang</span><em>Territory</em></div>
         <div className="round-label">{ROUND_SECONDS} seconds · {CAPTURE_WIN}% captures instantly</div>
         <div className="top-actions">
-          <button
-            className="pause-button"
-            disabled={phase !== "play" && phase !== "pause"}
-            onClick={phase === "play" ? pauseGame : resumeGame}
-          >
-            {phase === "pause" ? "Resume" : "Pause"}
-          </button>
           <button className="sound-button" onClick={() => setMuted((value) => !value)}>{muted ? "Sound off" : "Sound on"}</button>
         </div>
       </header>
@@ -452,6 +445,14 @@ export default function Home() {
           onPointerUp={onPointerUp}
           onPointerCancel={onPointerUp}
         />
+        <button
+          className={`arena-pause ${phase === "pause" ? "is-paused" : ""}`}
+          disabled={phase !== "play" && phase !== "pause"}
+          onClick={phase === "play" ? pauseGame : resumeGame}
+        >
+          <span aria-hidden="true">{phase === "pause" ? "▶" : "Ⅱ"}</span>
+          {phase === "pause" ? "Resume" : "Pause"}
+        </button>
         {phase === "setup" && (
           <div className="setup-labels" aria-hidden="true">
             <span className={ready.dark ? "is-ready" : ""}>{ready.dark ? "Dark locked" : "Touch · pull · release"}</span>
