@@ -9,8 +9,10 @@ button { font:inherit; }
 .brand-mark { color:var(--coral); font-size:24px; line-height:0; }
 .brand em { color:var(--muted); font:700 9px Arial,sans-serif; letter-spacing:.16em; text-transform:uppercase; }
 .round-label { color:var(--muted); font-size:9px; letter-spacing:.14em; text-transform:uppercase; }
-.sound-button,.instructions button { justify-self:end; border:0; padding:9px; color:var(--ink); background:transparent; cursor:pointer; font-size:9px; font-weight:700; letter-spacing:.13em; text-transform:uppercase; }
-.sound-button:hover,.instructions button:hover { color:var(--coral); }
+.top-actions { justify-self:end; display:flex; align-items:center; gap:5px; }
+.sound-button,.pause-button,.instructions button { border:0; padding:9px; color:var(--ink); background:transparent; cursor:pointer; font-size:9px; font-weight:700; letter-spacing:.13em; text-transform:uppercase; }
+.pause-button { border:1px solid rgba(23,19,24,.24); border-radius:999px; padding-inline:13px; }
+.sound-button:hover,.pause-button:hover,.instructions button:hover { color:var(--coral); }
 .scoreboard { display:grid; grid-template-columns:1fr auto 1fr; align-items:center; gap:20px; }
 .force { display:flex; align-items:baseline; gap:12px; font:400 clamp(18px,2vw,25px) Georgia,serif; }
 .force strong { font:400 clamp(34px,5vw,60px)/1 Georgia,serif; }
@@ -27,6 +29,7 @@ button { font:inherit; }
 .setup-labels span { color:rgba(245,234,213,.58); font-size:8px; font-weight:700; letter-spacing:.15em; text-align:center; text-transform:uppercase; }
 .setup-labels span:last-child { color:rgba(23,19,24,.55); }
 .setup-labels .is-ready { color:var(--coral) !important; }
+.pause-hint { position:absolute; top:15px; left:50%; z-index:3; translate:-50% 0; padding:8px 12px; border-radius:999px; color:var(--cream); background:rgba(23,19,24,.72); font-size:8px; font-weight:700; letter-spacing:.12em; text-transform:uppercase; pointer-events:none; white-space:nowrap; }
 .result-card { position:absolute; inset:0; z-index:4; display:flex; flex-direction:column; align-items:center; justify-content:center; color:var(--cream); background:rgba(23,19,24,.84); backdrop-filter:blur(7px); }
 .result-card > span { color:var(--coral); font-size:9px; font-weight:700; letter-spacing:.2em; text-transform:uppercase; }
 .result-card h1 { margin:9px 0 7px; font:400 clamp(42px,7vw,86px)/1 Georgia,serif; letter-spacing:-.045em; }
@@ -40,7 +43,7 @@ button { font:inherit; }
   .territory-shell { padding:14px 11px 10px; grid-template-rows:auto auto minmax(320px,1fr) auto; gap:10px; }
   .topbar { grid-template-columns:1fr 1fr; }
   .round-label,.brand em { display:none; }
-  .sound-button { grid-column:2; }
+  .top-actions { grid-column:2; }
   .scoreboard { grid-template-columns:1fr 1fr; }
   .center-status { grid-column:1/-1; grid-row:2; justify-self:center; }
   .arena-shell { max-height:none; min-height:0; aspect-ratio:16/10; border-radius:15px; }

@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
 type Side = 0 | 1;
-type Phase = "setup" | "countdown" | "play" | "over";
+type Phase = "setup" | "countdown" | "play" | "pause" | "over";
 type Aim = { x: number; y: number; tx: number; ty: number; ready: boolean };
 type Ball = { x: number; y: number; vx: number; vy: number; r: number; side: Side };
 
@@ -11,6 +11,7 @@ const COLS = 32;
 const ROWS = 20;
 const ROUND_SECONDS = 60;
 const CAPTURE_WIN = 75;
+const BALL_SPEED = 13.5;
 const palette = { dark: "#171318", light: "#f5ead5", coral: "#f46642", grid: "#6c625e" };
 
 function freshCells() {
@@ -41,6 +42,7 @@ export default function Home() {
     lastTime: 0,
     countdownStart: 0,
     roundStart: 0,
+    pauseStart: 0,
     lastUiUpdate: 0,
     winner: null as Side | null,
   });
@@ -105,6 +107,44 @@ export default function Home() {
     setWinner(null);
     setPhase("setup");
   }, []);
+
+  const pauseGame = useCallback(() => {
+    const s = stateRef.current;
+    if (s.phase !== "play") return;
+    s.phase = "pause";
+    s.pauseStart = performance.now();
+    s.balls.forEach((ball) => {
+      const length = Math.hypot(ball.vx, ball.vy) || 1;
+      s.aims[ball.side] = {
+        x: ball.x,
+        y: ball.y,
+        tx: ball.x - (ball.vx / length) * 3,
+        ty: ball.y - (ball.vy / length) * 3,
+        ready: false,
+      };
+    });
+    pointersRef.current.clear();
+    setReady({ dark: false, light: false });
+    setPhase("pause");
+  }, []);
+
+  const resumeGame = useCallback(() => {
+    const s = stateRef.current;
+    if (s.phase !== "pause") return;
+    s.balls.forEach((ball) => {
+      const aim = s.aims[ball.side];
+      let dx = aim.x - aim.tx, dy = aim.y - aim.ty;
+      const length = Math.hypot(dx, dy) || 1;
+      dx /= length; dy /= length;
+      ball.x = aim.x; ball.y = aim.y;
+      ball.vx = dx * BALL_SPEED; ball.vy = dy * BALL_SPEED;
+    });
+    s.roundStart += performance.now() - s.pauseStart;
+    s.phase = "play";
+    pointersRef.current.clear();
+    setPhase("play");
+    tone(620, .1, .035);
+  }, [tone]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -204,13 +244,12 @@ export default function Home() {
 
     const launch = () => {
       const s = stateRef.current;
-      const speed = 13.5;
       s.balls = ([0, 1] as Side[]).map((side) => {
         const aim = s.aims[side];
         let dx = aim.x - aim.tx, dy = aim.y - aim.ty;
         const length = Math.hypot(dx, dy) || 1;
         dx /= length; dy /= length;
-        return { x: aim.x, y: aim.y, vx: dx * speed, vy: dy * speed, r: .38, side };
+        return { x: aim.x, y: aim.y, vx: dx * BALL_SPEED, vy: dy * BALL_SPEED, r: .38, side };
       });
       s.phase = "play";
       s.roundStart = performance.now();
@@ -237,7 +276,7 @@ export default function Home() {
         }
       }
 
-      if (s.phase === "setup" || s.phase === "countdown") {
+      if (s.phase === "setup" || s.phase === "countdown" || s.phase === "pause") {
         ([0, 1] as Side[]).forEach((side) => {
           const aim = s.aims[side];
           const color = side === 0 ? palette.light : palette.dark;
@@ -257,7 +296,7 @@ export default function Home() {
           ctx.moveTo(ex, ey); ctx.lineTo(ex - Math.cos(angle - .55) * 11, ey - Math.sin(angle - .55) * 11);
           ctx.lineTo(ex - Math.cos(angle + .55) * 11, ey - Math.sin(angle + .55) * 11); ctx.closePath(); ctx.fill();
           ctx.restore();
-          drawBall({ x: aim.x, y: aim.y, r: .46, side }, sx, sy, aim.ready);
+          if (s.phase !== "pause") drawBall({ x: aim.x, y: aim.y, r: .46, side }, sx, sy, aim.ready);
         });
       }
 
@@ -273,7 +312,7 @@ export default function Home() {
         if (elapsed >= 1680) launch();
       }
 
-      if (s.phase === "play" || s.phase === "over") {
+      if (s.phase === "play" || s.phase === "pause" || s.phase === "over") {
         if (s.phase === "play") {
           s.balls.forEach((ball) => stepBall(ball, dt));
           if (s.balls.length === 2) {
@@ -320,19 +359,31 @@ export default function Home() {
 
   const onPointerDown = (event: React.PointerEvent<HTMLCanvasElement>) => {
     const s = stateRef.current;
-    if (s.phase !== "setup") return;
+    if (s.phase !== "setup" && s.phase !== "pause") return;
     const point = pointFromEvent(event);
-    const side: Side = point.x < COLS / 2 ? 0 : 1;
-    if (s.aims[side].ready || [...pointersRef.current.values()].includes(side)) return;
+    let side: Side;
+    if (s.phase === "pause") {
+      const distances = ([0, 1] as Side[]).map((candidate) => ({
+        side: candidate,
+        distance: Math.hypot(point.x - s.aims[candidate].x, point.y - s.aims[candidate].y),
+      })).sort((a, b) => a.distance - b.distance);
+      if (distances[0].distance > 2.2) return;
+      side = distances[0].side;
+    } else {
+      side = point.x < COLS / 2 ? 0 : 1;
+    }
+    if ((s.phase === "setup" && s.aims[side].ready) || [...pointersRef.current.values()].includes(side)) return;
     event.currentTarget.setPointerCapture(event.pointerId);
     pointersRef.current.set(event.pointerId, side);
-    const clampedX = side === 0 ? Math.min(point.x, COLS / 2 - 1) : Math.max(point.x, COLS / 2 + 1);
-    s.aims[side] = { x: clampedX, y: point.y, tx: side === 0 ? clampedX - 3 : clampedX + 3, ty: point.y, ready: false };
+    if (s.phase === "setup") {
+      const clampedX = side === 0 ? Math.min(point.x, COLS / 2 - 1) : Math.max(point.x, COLS / 2 + 1);
+      s.aims[side] = { x: clampedX, y: point.y, tx: side === 0 ? clampedX - 3 : clampedX + 3, ty: point.y, ready: false };
+    }
   };
 
   const onPointerMove = (event: React.PointerEvent<HTMLCanvasElement>) => {
     const side = pointersRef.current.get(event.pointerId);
-    if (side === undefined || stateRef.current.phase !== "setup") return;
+    if (side === undefined || (stateRef.current.phase !== "setup" && stateRef.current.phase !== "pause")) return;
     const point = pointFromEvent(event);
     stateRef.current.aims[side].tx = point.x;
     stateRef.current.aims[side].ty = point.y;
@@ -340,7 +391,7 @@ export default function Home() {
 
   const onPointerUp = (event: React.PointerEvent<HTMLCanvasElement>) => {
     const side = pointersRef.current.get(event.pointerId);
-    if (side === undefined || stateRef.current.phase !== "setup") return;
+    if (side === undefined || (stateRef.current.phase !== "setup" && stateRef.current.phase !== "pause")) return;
     pointersRef.current.delete(event.pointerId);
     const aim = stateRef.current.aims[side];
     if (Math.hypot(aim.tx - aim.x, aim.ty - aim.y) < .8) {
@@ -351,7 +402,7 @@ export default function Home() {
     const next = { dark: stateRef.current.aims[0].ready, light: stateRef.current.aims[1].ready };
     setReady(next);
     tone(side === 0 ? 260 : 440, .08, .035);
-    if (next.dark && next.light) {
+    if (stateRef.current.phase === "setup" && next.dark && next.light) {
       stateRef.current.phase = "countdown";
       stateRef.current.countdownStart = performance.now();
       setPhase("countdown");
@@ -364,6 +415,7 @@ export default function Home() {
       : !ready.dark && ready.light ? "Dark, pull back and release" : "Both forces ready"
     : phase === "countdown" ? "Release together"
     : phase === "play" ? "The frontier moves with every strike"
+    : phase === "pause" ? "Pull either ball to redirect its path"
     : winner === null ? "Balance holds — a draw"
     : `${winner === 0 ? "Dark" : "Light"} claims the board`;
 
@@ -372,7 +424,12 @@ export default function Home() {
       <header className="topbar">
         <div className="brand"><span className="brand-mark">☯</span><span>Yin · Yang</span><em>Territory</em></div>
         <div className="round-label">{ROUND_SECONDS} seconds · {CAPTURE_WIN}% captures instantly</div>
-        <button className="sound-button" onClick={() => setMuted((value) => !value)}>{muted ? "Sound off" : "Sound on"}</button>
+        <div className="top-actions">
+          {(phase === "play" || phase === "pause") && (
+            <button className="pause-button" onClick={phase === "play" ? pauseGame : resumeGame}>{phase === "play" ? "Pause" : "Resume"}</button>
+          )}
+          <button className="sound-button" onClick={() => setMuted((value) => !value)}>{muted ? "Sound off" : "Sound on"}</button>
+        </div>
       </header>
 
       <section className="scoreboard" aria-live="polite">
@@ -397,6 +454,7 @@ export default function Home() {
             <span className={ready.light ? "is-ready" : ""}>{ready.light ? "Light locked" : "Touch · pull · release"}</span>
           </div>
         )}
+        {phase === "pause" && <div className="pause-hint">Press a ball · pull back · release · resume</div>}
         {phase === "over" && (
           <div className="result-card">
             <span>Territory settled</span>
