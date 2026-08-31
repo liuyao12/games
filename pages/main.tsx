@@ -19,15 +19,15 @@ function GameHub() {
       </section>
 
       <section className="game-grid" aria-label="Games">
-        <a className="game-card ping-pong" href="/games/yin-yang/">
+        <a className="game-card yin-yang" href="/games/yin-yang/">
           <div className="card-art yin-art" aria-hidden="true">
             <span className="orbit orbit-one" /><span className="orbit orbit-two" />
             <span className="ball coral" /><span className="ball cream" />
           </div>
           <div className="card-copy">
             <span className="number">01 · Two players</span>
-            <h2>Yin · Yang<br />Ping Pong</h2>
-            <p>Two balls launch together. Guard your side and hold the balance.</p>
+            <h2>Yin · Yang</h2>
+            <p>Choose both opening moves, then watch two balls redraw the territory one brick at a time.</p>
             <strong>Play now <span>↗</span></strong>
           </div>
         </a>

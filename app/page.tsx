@@ -2,38 +2,59 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 
-type Side = "yin" | "yang";
+type Side = 0 | 1;
+type Phase = "setup" | "countdown" | "play" | "over";
+type Aim = { x: number; y: number; tx: number; ty: number; ready: boolean };
 type Ball = { x: number; y: number; vx: number; vy: number; r: number; side: Side };
 
-const WIN_SCORE = 5;
+const COLS = 32;
+const ROWS = 20;
+const ROUND_SECONDS = 60;
+const CAPTURE_WIN = 75;
+const palette = { dark: "#171318", light: "#f5ead5", coral: "#f46642", grid: "#6c625e" };
+
+function freshCells() {
+  const cells = new Uint8Array(COLS * ROWS);
+  for (let y = 0; y < ROWS; y++) {
+    for (let x = Math.floor(COLS / 2); x < COLS; x++) cells[y * COLS + x] = 1;
+  }
+  return cells;
+}
 
 export default function Home() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const frameRef = useRef<number>(0);
+  const frameRef = useRef(0);
+  const pointersRef = useRef(new Map<number, Side>());
+  const audioRef = useRef<AudioContext | null>(null);
+  const mutedRef = useRef(false);
   const stateRef = useRef({
+    cells: freshCells(),
+    phase: "setup" as Phase,
+    aims: {
+      0: { x: 7.5, y: 10, tx: 4.5, ty: 12, ready: false },
+      1: { x: 24.5, y: 10, tx: 27.5, ty: 8, ready: false },
+    } as Record<Side, Aim>,
+    balls: [] as Ball[],
     width: 0,
     height: 0,
     dpr: 1,
-    phase: "aim" as "aim" | "countdown" | "play" | "over",
-    paddles: { yin: 0.5, yang: 0.5 },
-    aim: { yin: { y: 0.36, armed: false }, yang: { y: 0.64, armed: false } },
-    balls: [] as Ball[],
-    countdownStart: 0,
     lastTime: 0,
+    countdownStart: 0,
+    roundStart: 0,
+    lastUiUpdate: 0,
     winner: null as Side | null,
   });
-  const [score, setScore] = useState({ yin: 0, yang: 0 });
-  const scoreRef = useRef(score);
-  const [phase, setPhase] = useState<"aim" | "countdown" | "play" | "over">("aim");
-  const [armed, setArmed] = useState({ yin: false, yang: false });
-  const [muted, setMuted] = useState(false);
-  const mutedRef = useRef(false);
-  const audioRef = useRef<AudioContext | null>(null);
 
-  useEffect(() => { scoreRef.current = score; }, [score]);
+  const [phase, setPhase] = useState<Phase>("setup");
+  const [ready, setReady] = useState({ dark: false, light: false });
+  const [territory, setTerritory] = useState({ dark: 50, light: 50 });
+  const [seconds, setSeconds] = useState(ROUND_SECONDS);
+  const [winner, setWinner] = useState<Side | null>(null);
+  const [muted, setMuted] = useState(false);
+
   useEffect(() => { mutedRef.current = muted; }, [muted]);
 
-  const tone = useCallback((frequency: number, duration = 0.05, volume = 0.035) => {
+  const tone = useCallback((frequency: number, duration = 0.045, volume = 0.026) => {
     if (mutedRef.current) return;
     const AudioCtx = window.AudioContext || (window as typeof window & { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
     const context = audioRef.current || new AudioCtx();
@@ -49,36 +70,41 @@ export default function Home() {
     oscillator.stop(context.currentTime + duration);
   }, []);
 
-  const resetRound = useCallback(() => {
-    const s = stateRef.current;
-    s.phase = "aim";
-    s.balls = [];
-    s.aim.yin = { y: 0.36, armed: false };
-    s.aim.yang = { y: 0.64, armed: false };
-    setArmed({ yin: false, yang: false });
-    setPhase("aim");
+  const countTerritory = useCallback(() => {
+    const light = stateRef.current.cells.reduce((sum, value) => sum + value, 0);
+    const lightPercent = Math.round((light / stateRef.current.cells.length) * 100);
+    return { dark: 100 - lightPercent, light: lightPercent };
   }, []);
 
-  const resetMatch = useCallback(() => {
-    scoreRef.current = { yin: 0, yang: 0 };
-    setScore({ yin: 0, yang: 0 });
-    stateRef.current.winner = null;
-    resetRound();
-  }, [resetRound]);
+  const finishRound = useCallback((winner: Side | null) => {
+    const s = stateRef.current;
+    if (s.phase === "over") return;
+    const score = countTerritory();
+    s.phase = "over";
+    s.winner = winner ?? (score.dark === score.light ? null : score.dark > score.light ? 0 : 1);
+    setWinner(s.winner);
+    setTerritory(score);
+    setSeconds(0);
+    setPhase("over");
+    tone(s.winner === 0 ? 240 : 520, 0.35, 0.055);
+  }, [countTerritory, tone]);
 
-  const scorePoint = useCallback((side: Side) => {
-    const next = { ...scoreRef.current, [side]: scoreRef.current[side] + 1 };
-    scoreRef.current = next;
-    setScore(next);
-    tone(side === "yin" ? 260 : 520, 0.2, 0.06);
-    if (next[side] >= WIN_SCORE) {
-      stateRef.current.phase = "over";
-      stateRef.current.winner = side;
-      setPhase("over");
-    } else {
-      window.setTimeout(resetRound, 700);
-    }
-  }, [resetRound, tone]);
+  const reset = useCallback(() => {
+    const s = stateRef.current;
+    s.cells = freshCells();
+    s.phase = "setup";
+    s.aims[0] = { x: 7.5, y: 10, tx: 4.5, ty: 12, ready: false };
+    s.aims[1] = { x: 24.5, y: 10, tx: 27.5, ty: 8, ready: false };
+    s.balls = [];
+    s.winner = null;
+    s.lastTime = 0;
+    pointersRef.current.clear();
+    setReady({ dark: false, light: false });
+    setTerritory({ dark: 50, light: 50 });
+    setSeconds(ROUND_SECONDS);
+    setWinner(null);
+    setPhase("setup");
+  }, []);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -91,266 +117,300 @@ export default function Home() {
       const dpr = Math.min(window.devicePixelRatio || 1, 2);
       canvas.width = Math.round(rect.width * dpr);
       canvas.height = Math.round(rect.height * dpr);
-      const s = stateRef.current;
-      s.width = rect.width;
-      s.height = rect.height;
-      s.dpr = dpr;
+      stateRef.current.width = rect.width;
+      stateRef.current.height = rect.height;
+      stateRef.current.dpr = dpr;
     };
     resize();
     const observer = new ResizeObserver(resize);
     observer.observe(canvas);
 
-    const drawOrb = (x: number, y: number, r: number, side: Side, glow = false) => {
+    const drawBall = (ball: Pick<Ball, "x" | "y" | "r" | "side">, sx: number, sy: number, glow = true) => {
+      const x = ball.x * sx, y = ball.y * sy, r = ball.r * Math.min(sx, sy);
       ctx.save();
       if (glow) {
-        ctx.shadowColor = side === "yin" ? "rgba(255,107,69,.75)" : "rgba(255,239,198,.8)";
-        ctx.shadowBlur = r * 1.5;
+        ctx.shadowColor = ball.side === 0 ? "rgba(244,102,66,.55)" : "rgba(245,234,213,.65)";
+        ctx.shadowBlur = r * 1.4;
       }
-      ctx.beginPath();
-      ctx.arc(x, y, r, 0, Math.PI * 2);
-      ctx.fillStyle = side === "yin" ? "#ff6846" : "#fff0c9";
-      ctx.fill();
-      ctx.lineWidth = Math.max(1.5, r * 0.1);
-      ctx.strokeStyle = side === "yin" ? "#1a1618" : "#f06a4d";
-      ctx.stroke();
-      ctx.beginPath();
-      ctx.arc(x - r * 0.25, y - r * 0.27, r * 0.18, 0, Math.PI * 2);
-      ctx.fillStyle = side === "yin" ? "#ffdca9" : "#2a1a22";
-      ctx.fill();
+      ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2);
+      ctx.fillStyle = ball.side === 0 ? palette.dark : palette.light; ctx.fill();
+      ctx.lineWidth = Math.max(1.5, r * 0.12);
+      ctx.strokeStyle = ball.side === 0 ? palette.light : palette.dark; ctx.stroke();
+      ctx.beginPath(); ctx.arc(x - r * .27, y - r * .28, r * .17, 0, Math.PI * 2);
+      ctx.fillStyle = ball.side === 0 ? palette.light : palette.dark; ctx.fill();
       ctx.restore();
+    };
+
+    const capture = (cellX: number, cellY: number, side: Side) => {
+      if (cellX < 0 || cellX >= COLS || cellY < 0 || cellY >= ROWS) return false;
+      const index = cellY * COLS + cellX;
+      if (stateRef.current.cells[index] === side) return false;
+      stateRef.current.cells[index] = side;
+      tone(side === 0 ? 185 : 370, .032, .018);
+      return true;
+    };
+
+    const collidingEnemyCells = (x: number, y: number, r: number, side: Side) => {
+      const hits: Array<[number, number]> = [];
+      const minX = Math.max(0, Math.floor(x - r));
+      const maxX = Math.min(COLS - 1, Math.floor(x + r));
+      const minY = Math.max(0, Math.floor(y - r));
+      const maxY = Math.min(ROWS - 1, Math.floor(y + r));
+      for (let cy = minY; cy <= maxY; cy++) {
+        for (let cx = minX; cx <= maxX; cx++) {
+          if (stateRef.current.cells[cy * COLS + cx] === side) continue;
+          const nearestX = Math.max(cx, Math.min(x, cx + 1));
+          const nearestY = Math.max(cy, Math.min(y, cy + 1));
+          const dx = x - nearestX, dy = y - nearestY;
+          if (dx * dx + dy * dy < r * r) hits.push([cx, cy]);
+        }
+      }
+      return hits;
+    };
+
+    const stepBall = (ball: Ball, dt: number) => {
+      const steps = Math.max(1, Math.ceil(Math.max(Math.abs(ball.vx), Math.abs(ball.vy)) * dt / .16));
+      const step = dt / steps;
+      for (let i = 0; i < steps; i++) {
+        let nextX = ball.x + ball.vx * step;
+        if (nextX - ball.r < 0 || nextX + ball.r > COLS) {
+          ball.vx *= -1;
+          nextX = Math.max(ball.r, Math.min(COLS - ball.r, nextX));
+        } else {
+          const hits = collidingEnemyCells(nextX, ball.y, ball.r, ball.side);
+          if (hits.length) {
+            hits.forEach(([x, y]) => capture(x, y, ball.side));
+            ball.vx *= -1;
+            nextX = ball.x;
+          }
+        }
+        ball.x = nextX;
+
+        let nextY = ball.y + ball.vy * step;
+        if (nextY - ball.r < 0 || nextY + ball.r > ROWS) {
+          ball.vy *= -1;
+          nextY = Math.max(ball.r, Math.min(ROWS - ball.r, nextY));
+        } else {
+          const hits = collidingEnemyCells(ball.x, nextY, ball.r, ball.side);
+          if (hits.length) {
+            hits.forEach(([x, y]) => capture(x, y, ball.side));
+            ball.vy *= -1;
+            nextY = ball.y;
+          }
+        }
+        ball.y = nextY;
+      }
+    };
+
+    const launch = () => {
+      const s = stateRef.current;
+      const speed = 13.5;
+      s.balls = ([0, 1] as Side[]).map((side) => {
+        const aim = s.aims[side];
+        let dx = aim.x - aim.tx, dy = aim.y - aim.ty;
+        const length = Math.hypot(dx, dy) || 1;
+        dx /= length; dy /= length;
+        return { x: aim.x, y: aim.y, vx: dx * speed, vy: dy * speed, r: .38, side };
+      });
+      s.phase = "play";
+      s.roundStart = performance.now();
+      setPhase("play");
+      tone(620, .14, .045);
     };
 
     const loop = (time: number) => {
       const s = stateRef.current;
-      const dt = Math.min((time - (s.lastTime || time)) / 1000, 0.025);
+      const dt = Math.min((time - (s.lastTime || time)) / 1000, .025);
       s.lastTime = time;
       const { width: w, height: h, dpr } = s;
+      const sx = w / COLS, sy = h / ROWS;
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
       ctx.clearRect(0, 0, w, h);
 
-      const padX = Math.max(34, w * 0.055);
-      const padH = Math.max(76, Math.min(128, h * 0.24));
-      const padW = Math.max(12, Math.min(18, w * 0.02));
-      const minY = padH / 2 + 14;
-      const maxY = h - minY;
-      const yinY = minY + s.paddles.yin * (maxY - minY);
-      const yangY = minY + s.paddles.yang * (maxY - minY);
+      ctx.fillStyle = palette.grid;
+      ctx.fillRect(0, 0, w, h);
+      const gap = Math.max(.7, Math.min(1.5, sx * .055));
+      for (let y = 0; y < ROWS; y++) {
+        for (let x = 0; x < COLS; x++) {
+          ctx.fillStyle = s.cells[y * COLS + x] === 0 ? palette.dark : palette.light;
+          ctx.fillRect(x * sx + gap / 2, y * sy + gap / 2, sx - gap, sy - gap);
+        }
+      }
 
-      ctx.save();
-      ctx.globalAlpha = 0.1;
-      const fieldR = Math.min(w, h) * 0.34;
-      ctx.beginPath(); ctx.arc(w / 2, h / 2, fieldR, Math.PI / 2, Math.PI * 1.5); ctx.fillStyle = "#ff6846"; ctx.fill();
-      ctx.beginPath(); ctx.arc(w / 2, h / 2, fieldR, -Math.PI / 2, Math.PI / 2); ctx.fillStyle = "#fff0c9"; ctx.fill();
-      ctx.beginPath(); ctx.arc(w / 2, h / 2 - fieldR / 2, fieldR / 2, 0, Math.PI * 2); ctx.fillStyle = "#fff0c9"; ctx.fill();
-      ctx.beginPath(); ctx.arc(w / 2, h / 2 + fieldR / 2, fieldR / 2, 0, Math.PI * 2); ctx.fillStyle = "#ff6846"; ctx.fill();
-      ctx.restore();
-
-      ctx.setLineDash([3, 10]);
-      ctx.strokeStyle = "rgba(255,235,199,.22)";
-      ctx.lineWidth = 1;
-      ctx.beginPath(); ctx.moveTo(w / 2, 18); ctx.lineTo(w / 2, h - 18); ctx.stroke();
-      ctx.setLineDash([]);
-
-      const drawPaddle = (x: number, y: number, side: Side) => {
-        ctx.save();
-        ctx.shadowColor = side === "yin" ? "rgba(255,104,70,.5)" : "rgba(255,240,201,.4)";
-        ctx.shadowBlur = 20;
-        ctx.fillStyle = side === "yin" ? "#ff6846" : "#fff0c9";
-        ctx.beginPath(); ctx.roundRect(x - padW / 2, y - padH / 2, padW, padH, padW); ctx.fill();
-        ctx.restore();
-      };
-      drawPaddle(padX, yinY, "yin");
-      drawPaddle(w - padX, yangY, "yang");
-
-      if (s.phase === "aim" || s.phase === "countdown") {
-        const r = Math.max(12, Math.min(17, w * 0.018));
-        const leftY = minY + s.aim.yin.y * (maxY - minY);
-        const rightY = minY + s.aim.yang.y * (maxY - minY);
-        drawOrb(padX + 42, leftY, r, "yin", s.aim.yin.armed);
-        drawOrb(w - padX - 42, rightY, r, "yang", s.aim.yang.armed);
-        ctx.setLineDash([4, 7]);
-        ctx.lineWidth = 1.5;
-        ctx.strokeStyle = "rgba(255,235,199,.42)";
-        ctx.beginPath(); ctx.moveTo(padX + 62, leftY); ctx.lineTo(w * 0.43, h / 2); ctx.stroke();
-        ctx.beginPath(); ctx.moveTo(w - padX - 62, rightY); ctx.lineTo(w * 0.57, h / 2); ctx.stroke();
-        ctx.setLineDash([]);
+      if (s.phase === "setup" || s.phase === "countdown") {
+        ([0, 1] as Side[]).forEach((side) => {
+          const aim = s.aims[side];
+          const color = side === 0 ? palette.light : palette.dark;
+          ctx.save();
+          ctx.strokeStyle = color; ctx.fillStyle = color; ctx.globalAlpha = aim.ready ? .95 : .65;
+          ctx.lineWidth = 2; ctx.setLineDash([4, 6]);
+          ctx.beginPath(); ctx.moveTo(aim.x * sx, aim.y * sy); ctx.lineTo(aim.tx * sx, aim.ty * sy); ctx.stroke();
+          ctx.setLineDash([]); ctx.beginPath(); ctx.arc(aim.tx * sx, aim.ty * sy, 4, 0, Math.PI * 2); ctx.fill();
+          const launchX = aim.x + (aim.x - aim.tx);
+          const launchY = aim.y + (aim.y - aim.ty);
+          ctx.globalAlpha = aim.ready ? .95 : .82;
+          ctx.lineWidth = 2.5;
+          ctx.beginPath(); ctx.moveTo(aim.x * sx, aim.y * sy); ctx.lineTo(launchX * sx, launchY * sy); ctx.stroke();
+          const angle = Math.atan2((launchY - aim.y) * sy, (launchX - aim.x) * sx);
+          const ex = launchX * sx, ey = launchY * sy;
+          ctx.beginPath();
+          ctx.moveTo(ex, ey); ctx.lineTo(ex - Math.cos(angle - .55) * 11, ey - Math.sin(angle - .55) * 11);
+          ctx.lineTo(ex - Math.cos(angle + .55) * 11, ey - Math.sin(angle + .55) * 11); ctx.closePath(); ctx.fill();
+          ctx.restore();
+          drawBall({ x: aim.x, y: aim.y, r: .46, side }, sx, sy, aim.ready);
+        });
       }
 
       if (s.phase === "countdown") {
         const elapsed = time - s.countdownStart;
-        const count = Math.max(1, 3 - Math.floor(elapsed / 480));
-        ctx.fillStyle = "#fff0c9";
-        ctx.textAlign = "center";
-        ctx.textBaseline = "middle";
-        ctx.font = `600 ${Math.min(90, h * 0.15)}px Georgia, serif`;
+        const count = Math.max(1, 3 - Math.floor(elapsed / 560));
+        ctx.save();
+        ctx.fillStyle = palette.coral; ctx.textAlign = "center"; ctx.textBaseline = "middle";
+        ctx.font = `600 ${Math.min(96, h * .18)}px Georgia, serif`;
+        ctx.shadowColor = "rgba(23,19,24,.25)"; ctx.shadowBlur = 20;
         ctx.fillText(String(count), w / 2, h / 2);
-        if (elapsed > 1440) {
-          const speed = Math.max(300, Math.min(480, w * 0.48));
-          const ballR = Math.max(10, Math.min(15, w * 0.016));
-          const leftY = minY + s.aim.yin.y * (maxY - minY);
-          const rightY = minY + s.aim.yang.y * (maxY - minY);
-          s.balls = [
-            { x: padX + 46, y: leftY, vx: speed, vy: (h / 2 - leftY) * 0.75, r: ballR, side: "yin" },
-            { x: w - padX - 46, y: rightY, vx: -speed, vy: (h / 2 - rightY) * 0.75, r: ballR, side: "yang" },
-          ];
-          s.phase = "play";
-          setPhase("play");
-          tone(640, 0.13, 0.05);
-        }
+        ctx.restore();
+        if (elapsed >= 1680) launch();
       }
 
-      if (s.phase === "play") {
-        for (const ball of s.balls) {
-          ball.x += ball.vx * dt;
-          ball.y += ball.vy * dt;
-          if (ball.y - ball.r < 6 && ball.vy < 0) { ball.y = 6 + ball.r; ball.vy *= -1; tone(190); }
-          if (ball.y + ball.r > h - 6 && ball.vy > 0) { ball.y = h - 6 - ball.r; ball.vy *= -1; tone(190); }
-
-          const hitPaddle = (px: number, py: number, isLeft: boolean) => {
-            const movingToward = isLeft ? ball.vx < 0 : ball.vx > 0;
-            const touchingX = isLeft
-              ? ball.x - ball.r <= px + padW / 2 && ball.x > px
-              : ball.x + ball.r >= px - padW / 2 && ball.x < px;
-            if (movingToward && touchingX && Math.abs(ball.y - py) < padH / 2 + ball.r) {
-              ball.x = isLeft ? px + padW / 2 + ball.r : px - padW / 2 - ball.r;
-              ball.vx = Math.abs(ball.vx) * (isLeft ? 1.035 : -1.035);
-              ball.vy += ((ball.y - py) / (padH / 2)) * 170;
-              tone(ball.side === "yin" ? 330 : 440, 0.06, 0.045);
-            }
-          };
-          hitPaddle(padX, yinY, true);
-          hitPaddle(w - padX, yangY, false);
-        }
-
-        if (s.balls.length === 2) {
-          const [a, b] = s.balls;
-          const dx = b.x - a.x, dy = b.y - a.y;
-          const dist = Math.hypot(dx, dy);
-          if (dist > 0 && dist < a.r + b.r) {
-            const nx = dx / dist, ny = dy / dist;
-            const impulse = (b.vx - a.vx) * nx + (b.vy - a.vy) * ny;
-            if (impulse < 0) {
-              a.vx += impulse * nx; a.vy += impulse * ny;
-              b.vx -= impulse * nx; b.vy -= impulse * ny;
-              tone(760, 0.08, 0.05);
+      if (s.phase === "play" || s.phase === "over") {
+        if (s.phase === "play") {
+          s.balls.forEach((ball) => stepBall(ball, dt));
+          if (s.balls.length === 2) {
+            const [a, b] = s.balls;
+            const dx = b.x - a.x, dy = b.y - a.y, distance = Math.hypot(dx, dy);
+            if (distance > 0 && distance < a.r + b.r) {
+              const nx = dx / distance, ny = dy / distance;
+              const relative = (b.vx - a.vx) * nx + (b.vy - a.vy) * ny;
+              if (relative < 0) {
+                a.vx += relative * nx; a.vy += relative * ny;
+                b.vx -= relative * nx; b.vy -= relative * ny;
+                tone(760, .06, .03);
+              }
             }
           }
         }
+        s.balls.forEach((ball) => drawBall(ball, sx, sy));
 
-        for (const ball of s.balls) drawOrb(ball.x, ball.y, ball.r, ball.side, true);
-
-        const escapedLeft = s.balls.find((ball) => ball.x < -ball.r * 2);
-        const escapedRight = s.balls.find((ball) => ball.x > w + ball.r * 2);
-        if (escapedLeft || escapedRight) {
-          s.phase = "countdown";
-          scorePoint(escapedLeft ? "yang" : "yin");
+        if (s.phase === "play" && (time - s.lastUiUpdate > 80)) {
+          s.lastUiUpdate = time;
+          const score = countTerritory();
+          const remaining = Math.max(0, Math.ceil(ROUND_SECONDS - (time - s.roundStart) / 1000));
+          setTerritory(score); setSeconds(remaining);
+          if (score.dark >= CAPTURE_WIN) finishRound(0);
+          else if (score.light >= CAPTURE_WIN) finishRound(1);
+          else if (remaining <= 0) finishRound(null);
         }
       }
 
       frameRef.current = requestAnimationFrame(loop);
     };
+
     frameRef.current = requestAnimationFrame(loop);
     return () => { observer.disconnect(); cancelAnimationFrame(frameRef.current); };
-  }, [scorePoint, tone]);
+  }, [countTerritory, finishRound, tone]);
 
-  const armSide = (side: Side, y: number) => {
+  const pointFromEvent = (event: React.PointerEvent<HTMLCanvasElement>) => {
+    const rect = event.currentTarget.getBoundingClientRect();
+    return {
+      x: Math.max(.6, Math.min(COLS - .6, ((event.clientX - rect.left) / rect.width) * COLS)),
+      y: Math.max(.6, Math.min(ROWS - .6, ((event.clientY - rect.top) / rect.height) * ROWS)),
+    };
+  };
+
+  const onPointerDown = (event: React.PointerEvent<HTMLCanvasElement>) => {
     const s = stateRef.current;
-    if (s.phase !== "aim") return;
-    const rect = canvasRef.current!.getBoundingClientRect();
-    const normalized = Math.max(0, Math.min(1, (y - rect.top) / rect.height));
-    s.aim[side].y = normalized;
-    s.aim[side].armed = true;
-    const next = { yin: s.aim.yin.armed, yang: s.aim.yang.armed };
-    setArmed(next);
-    tone(side === "yin" ? 300 : 470, 0.08, 0.04);
-    if (next.yin && next.yang) {
-      s.phase = "countdown";
-      s.countdownStart = performance.now();
+    if (s.phase !== "setup") return;
+    const point = pointFromEvent(event);
+    const side: Side = point.x < COLS / 2 ? 0 : 1;
+    if (s.aims[side].ready || [...pointersRef.current.values()].includes(side)) return;
+    event.currentTarget.setPointerCapture(event.pointerId);
+    pointersRef.current.set(event.pointerId, side);
+    const clampedX = side === 0 ? Math.min(point.x, COLS / 2 - 1) : Math.max(point.x, COLS / 2 + 1);
+    s.aims[side] = { x: clampedX, y: point.y, tx: side === 0 ? clampedX - 3 : clampedX + 3, ty: point.y, ready: false };
+  };
+
+  const onPointerMove = (event: React.PointerEvent<HTMLCanvasElement>) => {
+    const side = pointersRef.current.get(event.pointerId);
+    if (side === undefined || stateRef.current.phase !== "setup") return;
+    const point = pointFromEvent(event);
+    stateRef.current.aims[side].tx = point.x;
+    stateRef.current.aims[side].ty = point.y;
+  };
+
+  const onPointerUp = (event: React.PointerEvent<HTMLCanvasElement>) => {
+    const side = pointersRef.current.get(event.pointerId);
+    if (side === undefined || stateRef.current.phase !== "setup") return;
+    pointersRef.current.delete(event.pointerId);
+    const aim = stateRef.current.aims[side];
+    if (Math.hypot(aim.tx - aim.x, aim.ty - aim.y) < .8) {
+      aim.tx = aim.x + (side === 0 ? -3 : 3);
+      aim.ty = aim.y;
+    }
+    aim.ready = true;
+    const next = { dark: stateRef.current.aims[0].ready, light: stateRef.current.aims[1].ready };
+    setReady(next);
+    tone(side === 0 ? 260 : 440, .08, .035);
+    if (next.dark && next.light) {
+      stateRef.current.phase = "countdown";
+      stateRef.current.countdownStart = performance.now();
       setPhase("countdown");
     }
   };
 
-  const onPointer = (event: React.PointerEvent<HTMLCanvasElement>) => {
-    const rect = event.currentTarget.getBoundingClientRect();
-    const side: Side = event.clientX - rect.left < rect.width / 2 ? "yin" : "yang";
-    const s = stateRef.current;
-    if (s.phase === "aim" && event.type === "pointerdown") {
-      event.currentTarget.setPointerCapture(event.pointerId);
-      armSide(side, event.clientY);
-    } else if (s.phase === "play") {
-      s.paddles[side] = Math.max(0, Math.min(1, (event.clientY - rect.top) / rect.height));
-    }
-  };
-
-  useEffect(() => {
-    const onKey = (event: KeyboardEvent) => {
-      const s = stateRef.current;
-      const step = 0.07;
-      if (event.key.toLowerCase() === "w") s.paddles.yin = Math.max(0, s.paddles.yin - step);
-      if (event.key.toLowerCase() === "s") s.paddles.yin = Math.min(1, s.paddles.yin + step);
-      if (event.key === "ArrowUp") s.paddles.yang = Math.max(0, s.paddles.yang - step);
-      if (event.key === "ArrowDown") s.paddles.yang = Math.min(1, s.paddles.yang + step);
-      if (event.key === " " && phase === "aim") {
-        s.aim.yin.armed = true; s.aim.yang.armed = true;
-        setArmed({ yin: true, yang: true });
-        s.phase = "countdown"; s.countdownStart = performance.now(); setPhase("countdown");
-      }
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [phase]);
-
-  const status = phase === "aim"
-    ? !armed.yin && !armed.yang ? "Each player taps their side to set an angle"
-      : armed.yin && !armed.yang ? "Yang, choose your launch"
-      : !armed.yin && armed.yang ? "Yin, choose your launch" : "Ready"
-    : phase === "countdown" ? "Both forces release together"
-    : phase === "play" ? "Drag your half to guard your gate"
-    : `${stateRef.current.winner === "yin" ? "Yin" : "Yang"} holds the balance`;
+  const status = phase === "setup"
+    ? !ready.dark && !ready.light ? "Place a ball, pull back, then release"
+      : ready.dark && !ready.light ? "Light, pull back and release"
+      : !ready.dark && ready.light ? "Dark, pull back and release" : "Both forces ready"
+    : phase === "countdown" ? "Release together"
+    : phase === "play" ? "The frontier moves with every strike"
+    : winner === null ? "Balance holds — a draw"
+    : `${winner === 0 ? "Dark" : "Light"} claims the board`;
 
   return (
-    <main className="game-shell">
+    <main className="territory-shell">
       <header className="topbar">
-        <div className="brand"><span className="brand-mark">☯</span><span>Yin · Yang</span><em>Ping Pong</em></div>
-        <div className="round-label">First to {WIN_SCORE}</div>
-        <button className="icon-button" onClick={() => setMuted((v) => !v)} aria-label={muted ? "Turn sound on" : "Mute sound"}>{muted ? "Sound off" : "Sound on"}</button>
+        <div className="brand"><span className="brand-mark">☯</span><span>Yin · Yang</span><em>Territory</em></div>
+        <div className="round-label">{ROUND_SECONDS} seconds · {CAPTURE_WIN}% captures instantly</div>
+        <button className="sound-button" onClick={() => setMuted((value) => !value)}>{muted ? "Sound off" : "Sound on"}</button>
       </header>
 
       <section className="scoreboard" aria-live="polite">
-        <div className="player player-yin"><span>Yin</span><strong>{score.yin}</strong></div>
-        <div className="status"><span className="status-dot" />{status}</div>
-        <div className="player player-yang"><strong>{score.yang}</strong><span>Yang</span></div>
+        <div className="force dark-force"><span>Dark</span><strong>{territory.dark}<small>%</small></strong></div>
+        <div className="center-status"><span>{String(seconds).padStart(2, "0")}</span><p>{status}</p></div>
+        <div className="force light-force"><strong>{territory.light}<small>%</small></strong><span>Light</span></div>
       </section>
 
-      <section className="arena-wrap">
-        <div className="corner-label left">01 / HEAT</div>
+      <section className="arena-shell">
         <canvas
           ref={canvasRef}
-          className="arena"
-          aria-label="Two-player Yin Yang Ping Pong game board"
-          onPointerDown={onPointer}
-          onPointerMove={onPointer}
+          className="territory-canvas"
+          aria-label="Yin Yang territory board"
+          onPointerDown={onPointerDown}
+          onPointerMove={onPointerMove}
+          onPointerUp={onPointerUp}
+          onPointerCancel={onPointerUp}
         />
-        <div className="corner-label right">BALANCE / {String(score.yin + score.yang + 1).padStart(2, "0")}</div>
-        {phase === "aim" && (
-          <div className="launch-overlay" aria-hidden="true">
-            <div className={`launch-side yin ${armed.yin ? "armed" : ""}`}><b>{armed.yin ? "Locked" : "Tap to aim"}</b><span>Yin launch</span></div>
-            <div className={`launch-side yang ${armed.yang ? "armed" : ""}`}><b>{armed.yang ? "Locked" : "Tap to aim"}</b><span>Yang launch</span></div>
+        {phase === "setup" && (
+          <div className="setup-labels" aria-hidden="true">
+            <span className={ready.dark ? "is-ready" : ""}>{ready.dark ? "Dark locked" : "Touch · pull · release"}</span>
+            <span className={ready.light ? "is-ready" : ""}>{ready.light ? "Light locked" : "Touch · pull · release"}</span>
           </div>
         )}
         {phase === "over" && (
-          <div className="winner-card">
-            <span>Match complete</span>
-            <h1>{stateRef.current.winner === "yin" ? "Yin" : "Yang"} wins</h1>
-            <button onClick={resetMatch}>Play again</button>
+          <div className="result-card">
+            <span>Territory settled</span>
+            <h1>{winner === null ? "Perfect balance" : `${winner === 0 ? "Dark" : "Light"} prevails`}</h1>
+            <p>{territory.dark}% dark · {territory.light}% light</p>
+            <button onClick={reset}>Set a new opening</button>
           </div>
         )}
       </section>
 
-      <footer>
-        <p><strong>Touch</strong> Two fingers can play at once. <strong>Mouse</strong> arm one side, then the other.</p>
-        <p className="keyboard"><strong>Keyboard</strong> W/S · ↑/↓ · Space to quick-launch</p>
-        <button onClick={resetMatch} className="reset-button">Reset match</button>
+      <footer className="instructions">
+        <p><strong>Touch</strong> Both players pull and release at once.</p>
+        <p><strong>Mouse</strong> Pull one opening, then the other.</p>
+        <button onClick={reset}>Reset field</button>
       </footer>
     </main>
   );

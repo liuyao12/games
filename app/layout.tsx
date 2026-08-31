@@ -13,19 +13,17 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  metadataBase: new URL("https://yin-yang-ping-pong.liuyao401844.chatgpt.site"),
-  title: "Yin · Yang Ping Pong",
-  description: "A two-player, two-ball game of balance for touchscreens and mouse.",
+  metadataBase: new URL("https://liuyao12.github.io/games/yin-yang/"),
+  title: "Yin · Yang — Territory in Motion",
+  description: "Place and aim two opposing balls, then watch them redraw the board one brick at a time.",
   openGraph: {
-    title: "Yin · Yang Ping Pong",
-    description: "Two players. Two balls. One balance.",
-    images: [{ url: "/og.png", width: 1731, height: 909, alt: "Yin and Yang balls launching toward one another" }],
+    title: "Yin · Yang — Territory in Motion",
+    description: "Choose both opening moves. Every strike changes the frontier.",
   },
   twitter: {
-    card: "summary_large_image",
-    title: "Yin · Yang Ping Pong",
-    description: "Two players. Two balls. One balance.",
-    images: ["/og.png"],
+    card: "summary",
+    title: "Yin · Yang — Territory in Motion",
+    description: "Choose both opening moves. Every strike changes the frontier.",
   },
   icons: {
     icon: "/favicon.svg",
