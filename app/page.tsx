@@ -445,14 +445,6 @@ export default function Home() {
           onPointerUp={onPointerUp}
           onPointerCancel={onPointerUp}
         />
-        <button
-          className={`arena-pause ${phase === "pause" ? "is-paused" : ""}`}
-          disabled={phase !== "play" && phase !== "pause"}
-          onClick={phase === "play" ? pauseGame : resumeGame}
-        >
-          <span aria-hidden="true">{phase === "pause" ? "▶" : "Ⅱ"}</span>
-          {phase === "pause" ? "Resume" : "Pause"}
-        </button>
         {phase === "setup" && (
           <div className="setup-labels" aria-hidden="true">
             <span className={ready.dark ? "is-ready" : ""}>{ready.dark ? "Dark locked" : "Touch · pull · release"}</span>
@@ -471,8 +463,18 @@ export default function Home() {
       </section>
 
       <footer className="instructions">
-        <p><strong>Touch</strong> Both players pull and release at once.</p>
-        <p><strong>Mouse</strong> Pull one opening, then the other.</p>
+        <div className="instruction-copy">
+          <p><strong>Touch</strong> Both players pull and release at once.</p>
+          <p><strong>Mouse</strong> Pull one opening, then the other.</p>
+        </div>
+        <button
+          className={`arena-pause ${phase === "pause" ? "is-paused" : ""}`}
+          disabled={phase !== "play" && phase !== "pause"}
+          onClick={phase === "play" ? pauseGame : resumeGame}
+        >
+          <span aria-hidden="true">{phase === "pause" ? "▶" : "Ⅱ"}</span>
+          {phase === "pause" ? "Resume" : "Pause"}
+        </button>
         <button onClick={reset}>Reset field</button>
       </footer>
     </main>
