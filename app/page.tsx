@@ -11,7 +11,7 @@ const COLS = 32;
 const ROWS = 20;
 const ROUND_SECONDS = 60;
 const CAPTURE_WIN = 75;
-const BALL_SPEED = 13.5;
+const BALL_SPEED = 67.5;
 const palette = { dark: "#171318", light: "#f5ead5", coral: "#f46642", grid: "#6c625e" };
 
 function freshCells() {
@@ -425,9 +425,13 @@ export default function Home() {
         <div className="brand"><span className="brand-mark">☯</span><span>Yin · Yang</span><em>Territory</em></div>
         <div className="round-label">{ROUND_SECONDS} seconds · {CAPTURE_WIN}% captures instantly</div>
         <div className="top-actions">
-          {(phase === "play" || phase === "pause") && (
-            <button className="pause-button" onClick={phase === "play" ? pauseGame : resumeGame}>{phase === "play" ? "Pause" : "Resume"}</button>
-          )}
+          <button
+            className="pause-button"
+            disabled={phase !== "play" && phase !== "pause"}
+            onClick={phase === "play" ? pauseGame : resumeGame}
+          >
+            {phase === "pause" ? "Resume" : "Pause"}
+          </button>
           <button className="sound-button" onClick={() => setMuted((value) => !value)}>{muted ? "Sound off" : "Sound on"}</button>
         </div>
       </header>
